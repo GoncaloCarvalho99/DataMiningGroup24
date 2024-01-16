@@ -7,6 +7,7 @@ install.packages("sandwich")
 install.packages("tidyverse")
 install.packages("readxl")
 install.packages("writexl")
+install.packages("lmtest")
 
 library(car)
 library(lmtest)
@@ -14,10 +15,10 @@ library(sandwich)
 library(tidyverse)  
 library(readxl)
 library(writexl)
+library(lmtest)
 
 
 # Load the dataset
-#billionaires <- read_excel("C:/Users/maria/OneDrive/Documentos/_NOVA/1st sem/Statistics/Project/shark_tank.xlsx")
 billionaires <- read_excel("C:/Users/maria/OneDrive/Documentos/_NOVA/1st sem/Statistics/Project/billionaires.xlsx")
 
 # Explore the structure of the dataset
@@ -90,6 +91,8 @@ billionaires_filtered$age[is.na(billionaires_filtered$age)] <- median(billionair
 
 colSums(is.na(billionaires_filtered[,var]))
 
+bill <- billionaires_filtered
+
 
 
 # Plots
@@ -137,20 +140,19 @@ colSums(is.na(billionaires_filtered[,var]))
 # Model
 
 # Variables
-worth <- billionaires$finalWorth
-gender <- billionaires$gender
-selfmade <- billionaires$selfMade
-age <- billionaires$age
-cpi <- billionaires$cpi_country
-cpi_change <- billionaires$cpi_change_country
-gdp <- billionaires$gdp_country
-tax_rate <- billionaires$total_tax_rate_country
-pop <- billionaires$population_country
+worth <- bill$finalWorth
+gender <- bill$gender
+selfmade <- bill$selfMade
+age <- bill$age
+cpi <- bill$cpi_country
+cpi_change <- bill$cpi_change_country
+gdp <- bill$gdp_country
+tax_rate <- bill$total_tax_rate_country
+pop <- bill$population_country
 
 
-model <- lm(worth ~ gender + selfmade + age + cpi + cpi_change + gdp + tax_rate + pop, data = billionaires)
+model <- lm(worth ~ gender + selfmade + age + cpi + cpi_change + gdp + tax_rate + pop, data = bill)
 summary(model)
-
 
 
 # Hypothesis Testing
@@ -161,113 +163,68 @@ plot(model, which = 1, main = "Linearity Test: Residuals vs Fitted")
 # Interpretation: Se houver um padrão discernível ou não linearidade no gráfico, a suposição de linearidade pode ser violada.
 
 
-# 2. Independence of Errors (Durbin-Watson Test)
-dw_test <- durbinWatsonTest(model)
+plot(x = age, y = log(worth), main = "Scatter Plot")
+plot(x = log(cpi), y = log(worth), main = "Scatter Plot")
+plot(x = cpi_change, y = log(worth), main = "Scatter Plot")
+plot(x = log(gdp), y = log(worth), main = "Scatter Plot")
+plot(x = tax_rate, y = log(worth), main = "Scatter Plot")
+plot(x = log(pop), y = log(worth), main = "Scatter Plot")
 
-# Interpretation: O teste de Durbin-Watson verifica a autocorrelação nos resíduos. Um valor próximo a 2 sugere independência, enquanto valores significativamente diferentes podem indicar autocorrelação.
+model4 <- lm(log(worth) ~ gender + selfmade + age + log(cpi) + cpi_change + log(gdp) + tax_rate + log(pop), data = bill)
+summary(model4)
+plot(model4, which = 1, main = "Linearity Test: Residuals vs Fitted")
 
-# 3. Homoscedasticity Test (Visual inspection with scale-location plot)
-plot(model, which = 3, main = "Homoscedasticity Test: Scale-Location")
 
+# Testing Multiple Linear Restrictions
+
+res.ur <- lm(log(worth) ~ gender + selfmade + age + log(cpi) + cpi_change + log(gdp) + tax_rate + log(pop), data = bill)
+(r2.ur <- summary(res.ur)$r.squared)
+
+res.r <- lm(log(worth) ~ selfmade + age + log(gdp) + tax_rate + log(pop), data = bill)
+(r2.r <- summary(res.r)$r.squared)
+
+(F <- ( (r2.ur-r2.r)/3 ) / ( (1-r2.ur)/(2456-8-1) ) )
+1 - pf(F, 3, 2447)
+
+final_model <- lm(log(worth) ~ selfmade + age + log(gdp) + tax_rate + log(pop), data = bill)
+summary(final_model)
+
+
+# 3. No perfect multicollinearity (Check variance inflation factors - VIF)
+vif(final_model)
+
+
+# 4. Homoskedasticity Test (Visual inspection with scale-location plot)
+
+plot(final_model, which = 3, main = "Homoscedasticity Test: Scale-Location")
 # Interpretation: Se houver um padrão discernível ou uma mudança na dispersão com os valores ajustados, a homoscedasticidade pode ser violada.
 
-# Além disso, você pode realizar testes formais para homoscedasticidade, como o teste Breusch-Pagan ou White.
-
 # Teste de Breusch-Pagan para Homoscedasticidade
-bp_test <- bptest(model)
-print(bp_test)
-
+bptest(final_model)
 # Interpretation: Um valor de p próximo de 1 indica homoscedasticidade. Um valor significativamente diferente pode indicar heteroscedasticidade.
 
-# Teste de White para Homoscedasticidade
-white_test <- white.test(model)
-print(white_test)
-
-# Interpretation: O teste White também verifica homoscedasticidade. A estatística de teste e o p-valor são usados para avaliar a homoscedasticidade.
 
 
+# RESET test
+
+RESETreg <- lm(log(worth) ~ selfmade + age + log(gdp) + tax_rate + log(pop) + 
+                 I(fitted(model4)^2) + I(fitted(model4)^3), data = bill)
+RESETreg
+#ou
+linearHypothesis(RESETreg, matchCoefs(RESETreg,"fitted"))
+#ou
+resettest(model4)
 
 
-
-
-
-logistic_model <- glm(deal ~ lvaluation + laskedfor + lstake + multi_entrep, family='binomial', data = billionaires)
-logistic_model
-
-summary(logistic_model)
-
-anova(logistic_model, test = "Chisq")
-
-vif(logistic_model)
-
-logistic_model$fitted.values
-
-plot(logistic_model$fitted.values, residuals(logistic_model, type = "deviance"))
-
-residuals <- residuals(logistic_model, type = "deviance")
-plot(logistic_model, which = 1)  # Residuals vs Fitted
-plot(logistic_model, which = 2)  # Normal Q-Q plot
-
-
-
-
-
-
-# 1. Linearity of the model (Visually inspect with a residuals vs. fitted values plot)
-plot(model, which = 1)
-
-# 2. Amostragem Aleatória
-
-# 3. Variabilidade dos regressores (variáveis explicativas)
-
-# 4. Ausência de multicolinearidade perfeita
-
-# 5. Número de observações > nº de variáveis
-
-# 6. O erro (u) tem média nula
-# o valor esperado é 0.
-# violação da hipótese: enviesamento do termo autónomo e do declive
-
-# 7. Homocedasticidade
-#     - outliers, modelo incorretamente especificado, assimetria da distribuição de um ou + regressores
-#     - heterocedasticidade: estimadores OLS ineficientes
-#     - analisar a relação entre os residuos e cada uma das var explicativas
-#     - BP test, White test, White (special) test
-
-# 8. Ausência de autocorrelação entre os erros
-#     - mais em séries temporais
-#     - Durbin-Watson test, Breush-Godfrey
-
-# 9. Ausência de correlação entre as var explicativas e o erro (cov=0)
-#     - endogeneidade, VI
-#     - Hausman test
-
-# 10. O termo de erro tem distribuição normal.
-#     - histograma dos resíduos
-#     - test de Jarque-Bera
-
-
-# Incorreta especificação do modelo: Formal funcional errada
-
-# Incorreta especificação do modelo: Erros de medição nas variáveis
-
-
-
-# 2. Independence of errors (Check Durbin-Watson statistic)
-durbinWatsonTest(model)
-
-# 3. Homoscedasticity (Visually inspect with a scale-location plot)
-plot(model, which = 3)
-
-# 4. No perfect multicollinearity (Check variance inflation factors - VIF)
-library(car)
-vif(model)
-
-# 5. No endogeneity of regressors (Consider instrumental variables if applicable)
 
 # 6. Normally distributed errors (Check normality of residuals with a quantile-quantile plot)
-qqnorm(resid(model))
-qqline(resid(model))
+qqnorm(resid(final_model))
+qqline(resid(final_model))
 
 # Additionally, a formal test for normality can be performed
-shapiro.test(resid(model))
+shapiro.test(resid(final_model))
+
+
+
+
+
